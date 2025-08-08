@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { matchDataService } from './matchDataService';
 import type { Country, Team, Match, Prediction } from '../types';
 
 export class APIService {
@@ -27,6 +28,13 @@ export class APIService {
 
   // Matches
   async getUpcomingMatches(countryId?: string): Promise<Match[]> {
+    // Refresh today's matches from external sources
+    try {
+      await matchDataService.refreshTodaysMatches();
+    } catch (error) {
+      console.warn('Failed to refresh matches from external sources:', error);
+    }
+
     let query = supabase
       .from('matches')
       .select(`

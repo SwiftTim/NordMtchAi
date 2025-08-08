@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, TrendingUp } from 'lucide-react';
+import { Search, Filter, TrendingUp, RefreshCw } from 'lucide-react';
 import type { Country, Match } from '../../types';
 import { apiService } from '../../services/api';
+import { matchDataService } from '../../services/matchDataService';
 import { CountrySelector } from '../Predictions/CountrySelector';
 import { MatchCard } from '../Predictions/MatchCard';
+import toast from 'react-hot-toast';
 
 export function HomePage() {
   const [countries, setCountries] = useState<Country[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
@@ -38,6 +41,20 @@ export function HomePage() {
       console.error('Error loading matches:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRefreshMatches = async () => {
+    setRefreshing(true);
+    try {
+      await matchDataService.refreshTodaysMatches();
+      await loadMatches();
+      toast.success('Matches updated successfully!');
+    } catch (error) {
+      console.error('Error refreshing matches:', error);
+      toast.error('Failed to refresh matches');
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -101,6 +118,15 @@ export function HomePage() {
             <button className="flex items-center space-x-2 px-4 py-2 text-gray-600 hover:text-blue-600 border border-gray-300 rounded-lg transition-colors">
               <Filter className="h-4 w-4" />
               <span>Filters</span>
+            </button>
+            
+            <button 
+              onClick={handleRefreshMatches}
+              disabled={refreshing}
+              className="flex items-center space-x-2 px-4 py-2 text-gray-600 hover:text-blue-600 border border-gray-300 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              <span>{refreshing ? 'Refreshing...' : 'Refresh Matches'}</span>
             </button>
           </div>
         </div>
