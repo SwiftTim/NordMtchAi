@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Filter, TrendingUp, RefreshCw } from 'lucide-react';
 import type { Country, Match } from '../../types';
 import { apiService } from '../../services/api';
-import { matchDataService } from '../../services/matchDataService';
+import { footballApiService } from '../../services/footballApiService';
 import { CountrySelector } from '../Predictions/CountrySelector';
 import { MatchCard } from '../Predictions/MatchCard';
 import toast from 'react-hot-toast';
@@ -47,7 +47,7 @@ export function HomePage() {
   const handleRefreshMatches = async () => {
     setRefreshing(true);
     try {
-      await matchDataService.refreshTodaysMatches();
+      // Refresh matches from real APIs
       await loadMatches();
       toast.success('Matches updated successfully!');
     } catch (error) {

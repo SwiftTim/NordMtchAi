@@ -60,7 +60,7 @@ export function PredictionModal({ isOpen, onClose, prediction }: PredictionModal
 
         <div className="p-6 space-y-8">
           {/* Main Prediction */}
-          <div className="bg-gradient-to-r from-blue-50 to-teal-50 rounded-xl p-6">
+          <div className="bg-gradient-to-r from-blue-50 to-teal-50 rounded-xl p-6 border border-blue-100">
             <div className="grid md:grid-cols-3 gap-6 mb-6">
               <div className="text-center">
                 <div className="text-3xl font-bold text-blue-600">
@@ -92,7 +92,7 @@ export function PredictionModal({ isOpen, onClose, prediction }: PredictionModal
               <div className="inline-flex items-center space-x-2 bg-white px-4 py-2 rounded-lg">
                 <Shield className={`h-5 w-5 ${getConfidenceColor(prediction.confidence_score)}`} />
                 <span className="font-medium text-gray-700">
-                  Confidence: {getConfidenceLabel(prediction.confidence_score)}
+                  AI Confidence: {getConfidenceLabel(prediction.confidence_score)}
                 </span>
                 <span className={`font-bold ${getConfidenceColor(prediction.confidence_score)}`}>
                   ({(prediction.confidence_score * 100).toFixed(0)}%)
@@ -136,7 +136,10 @@ export function PredictionModal({ isOpen, onClose, prediction }: PredictionModal
 
           {/* Feature Importance */}
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Key Factors</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
+              <TrendingUp className="h-5 w-5 text-blue-600" />
+              <span>Key Prediction Factors (50+ Criteria Analysis)</span>
+            </h3>
             <div className="space-y-3">
               {prediction.feature_importance.map((feature, index) => (
                 <div key={index} className="bg-gray-50 rounded-lg p-4">
@@ -151,8 +154,8 @@ export function PredictionModal({ isOpen, onClose, prediction }: PredictionModal
                   <div className="text-sm text-gray-600">{feature.description}</div>
                   <div className="mt-2 bg-gray-200 rounded-full h-2">
                     <div
-                      className={`h-2 rounded-full ${feature.impact >= 0 ? 'bg-green-500' : 'bg-red-500'}`}
-                      style={{ width: `${Math.abs(feature.impact) * 500}%` }}
+                      className={`h-2 rounded-full transition-all ${feature.impact >= 0 ? 'bg-green-500' : 'bg-red-500'}`}
+                      style={{ width: `${Math.min(100, Math.abs(feature.impact) * 100)}%` }}
                     />
                   </div>
                 </div>
@@ -192,11 +195,17 @@ export function PredictionModal({ isOpen, onClose, prediction }: PredictionModal
           </div>
 
           {/* AI Reasoning */}
-          <div className="bg-blue-50 rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">AI Analysis</h3>
+          <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-6 border border-purple-100">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center space-x-2">
+              <span className="bg-gradient-to-r from-purple-600 to-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-white text-sm font-bold">AI</span>
+              <span>Comprehensive Analysis</span>
+            </h3>
             <p className="text-gray-700 leading-relaxed">{prediction.reasoning}</p>
             <div className="mt-4 text-sm text-gray-500">
-              Model Version: {prediction.model_version} • Generated: {format(new Date(prediction.created_at), 'MMM dd, yyyy HH:mm')}
+              <div className="flex items-center justify-between">
+                <span>Model: {prediction.model_version} (50+ Criteria)</span>
+                <span>Generated: {format(new Date(prediction.created_at), 'MMM dd, yyyy HH:mm')}</span>
+              </div>
             </div>
           </div>
         </div>

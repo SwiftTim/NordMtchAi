@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
-import { matchDataService } from './matchDataService';
+import { footballApiService } from './footballApiService';
+import { aiPredictionService } from './aiPredictionService';
 import type { Country, Team, Match, Prediction } from '../types';
 
 export class APIService {
@@ -28,12 +29,12 @@ export class APIService {
 
   // Matches
   async getUpcomingMatches(countryId?: string): Promise<Match[]> {
-    // Refresh today's matches from external sources
-    try {
-      await matchDataService.refreshTodaysMatches();
-    } catch (error) {
-      console.warn('Failed to refresh matches from external sources:', error);
-    }
+    // Get real matches from API
+    const country = countryId ? await this.getCountryById(countryId) : null;
+    const apiMatches = await footballApiService.getUpcomingMatches(country?.code);
+    
+    // Sync with database
+    await this.syncApiMatchesToDatabase(apiMatches, countryId);
 
     let query = supabase
       .from('matches')
@@ -72,6 +73,110 @@ export class APIService {
     return data;
   }
 
+  private async getCountryById(countryId: string) {
+    const { data } = await supabase
+      .from('countries')
+      .select('*')
+      .eq('id', countryId)
+      .single();
+    return data;
+  }
+
+  private async syncApiMatchesToDatabase(apiMatches: any[], countryId?: string) {
+    for (const apiMatch of apiMatches) {
+      try {
+        // Get or create country
+        const countryCode = this.getCountryCodeFromLeague(apiMatch.league.country);
+        const { data: country } = await supabase
+          .from('countries')
+          .select('id')
+          .eq('code', countryCode)
+          .single();
+
+        if (!country) continue;
+
+        // Get or create teams
+        const homeTeam = await this.getOrCreateTeam(
+          apiMatch.teams.home.name,
+          country.id,
+          apiMatch.league.name
+        );
+        const awayTeam = await this.getOrCreateTeam(
+          apiMatch.teams.away.name,
+          country.id,
+          apiMatch.league.name
+        );
+
+        if (!homeTeam || !awayTeam) continue;
+
+        // Check if match exists
+        const { data: existingMatch } = await supabase
+          .from('matches')
+          .select('id')
+          .eq('home_team_id', homeTeam.id)
+          .eq('away_team_id', awayTeam.id)
+          .eq('match_date', apiMatch.fixture.date)
+          .single();
+
+        if (existingMatch) continue;
+
+        // Insert new match
+        await supabase
+          .from('matches')
+          .insert({
+            home_team_id: homeTeam.id,
+            away_team_id: awayTeam.id,
+            country_id: country.id,
+            match_date: apiMatch.fixture.date,
+            league: apiMatch.league.name,
+            venue: apiMatch.fixture.venue.name,
+            status: 'scheduled'
+          });
+      } catch (error) {
+        console.error('Error syncing match:', error);
+      }
+    }
+  }
+
+  private async getOrCreateTeam(teamName: string, countryId: string, league: string) {
+    try {
+      const { data: existingTeam } = await supabase
+        .from('teams')
+        .select('*')
+        .eq('name', teamName)
+        .eq('country_id', countryId)
+        .single();
+
+      if (existingTeam) return existingTeam;
+
+      const { data: newTeam } = await supabase
+        .from('teams')
+        .insert({
+          name: teamName,
+          country_id: countryId,
+          league: league
+        })
+        .select('*')
+        .single();
+
+      return newTeam;
+    } catch (error) {
+      console.error('Error getting/creating team:', error);
+      return null;
+    }
+  }
+
+  private getCountryCodeFromLeague(country: string): string {
+    const mapping: { [key: string]: string } = {
+      'Denmark': 'DK',
+      'Sweden': 'SE',
+      'Norway': 'NO',
+      'Finland': 'FI',
+      'Netherlands': 'NL'
+    };
+    return mapping[country] || 'DK';
+  }
+
   // Predictions
   async getPredictionByMatchId(matchId: string): Promise<Prediction | null> {
     const { data, error } = await supabase
@@ -95,15 +200,27 @@ export class APIService {
   }
 
   async generatePrediction(matchId: string): Promise<Prediction> {
-    // Simulate AI prediction generation with realistic data
     const match = await this.getMatchById(matchId);
     if (!match) throw new Error('Match not found');
 
-    const mockPrediction = this.generateMockPrediction(match);
+    // Use comprehensive AI prediction service
+    const prediction = await aiPredictionService.generateComprehensivePrediction(match);
 
     const { data, error } = await supabase
       .from('predictions')
-      .insert([mockPrediction])
+      .insert([{
+        match_id: prediction.match_id,
+        home_win_prob: prediction.home_win_prob,
+        draw_prob: prediction.draw_prob,
+        away_win_prob: prediction.away_win_prob,
+        predicted_home_score: prediction.predicted_home_score,
+        predicted_away_score: prediction.predicted_away_score,
+        confidence_score: prediction.confidence_score,
+        model_version: prediction.model_version,
+        feature_importance: prediction.feature_importance,
+        evidence_snippets: prediction.evidence_snippets,
+        reasoning: prediction.reasoning
+      }])
       .select(`
         *,
         match:matches(
@@ -117,55 +234,6 @@ export class APIService {
 
     if (error) throw error;
     return data;
-  }
-
-  private generateMockPrediction(match: Match) {
-    // Generate realistic probabilities
-    const homeAdvantage = 0.1;
-    const baseProb = 0.33;
-    
-    const home_win_prob = Math.random() * 0.4 + baseProb + homeAdvantage;
-    const away_win_prob = Math.random() * 0.4 + baseProb;
-    const draw_prob = 1 - home_win_prob - away_win_prob;
-
-    // Normalize probabilities
-    const total = home_win_prob + draw_prob + away_win_prob;
-    const normalized = {
-      home_win_prob: parseFloat((home_win_prob / total).toFixed(3)),
-      draw_prob: parseFloat((draw_prob / total).toFixed(3)),
-      away_win_prob: parseFloat((away_win_prob / total).toFixed(3))
-    };
-
-    return {
-      match_id: match.id,
-      ...normalized,
-      predicted_home_score: Math.round(Math.random() * 3),
-      predicted_away_score: Math.round(Math.random() * 3),
-      confidence_score: parseFloat((Math.random() * 0.4 + 0.6).toFixed(2)),
-      model_version: 'v1.4',
-      feature_importance: [
-        { feature: 'home_form', impact: Math.random() * 0.2, description: 'Recent home performance' },
-        { feature: 'away_form', impact: Math.random() * 0.15, description: 'Recent away performance' },
-        { feature: 'head_to_head', impact: Math.random() * 0.12, description: 'Historical matchups' },
-        { feature: 'injury_impact', impact: -Math.random() * 0.08, description: 'Key player unavailability' },
-        { feature: 'odds_movement', impact: Math.random() * 0.1, description: 'Betting market sentiment' }
-      ],
-      evidence_snippets: [
-        {
-          source: 'Local Sport Media',
-          timestamp: new Date().toISOString(),
-          text: `Coach confirms starting XI - key players available for ${match.home_team?.name}.`,
-          confidence: 0.85
-        },
-        {
-          source: 'Team Official',
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-          text: `Recent form suggests strong performance expected at ${match.venue}.`,
-          confidence: 0.78
-        }
-      ],
-      reasoning: `Model estimates ${match.home_team?.name} has slight advantage due to home form and lineup certainty. ${match.away_team?.name} showing consistent away performance but recent injury concerns may impact result. Weather conditions favorable for attacking play.`
-    };
   }
 
   // Watchlist
